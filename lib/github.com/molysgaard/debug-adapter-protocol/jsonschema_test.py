@@ -72,39 +72,41 @@ def make(converted, name, schem):
         return RefObj(name, schem)
 
     t = schem['type']
-    if t=='integer':
-        return Integer(schem)
-    elif t == 'number':
-        return Real(schem)
-    elif t=='string':
-        return String(schem)
-    elif t=='boolean':
-        return Boolean(schem)
-    elif t=='array':
-        tmp = make(converted, name, schem['items'])
-        return Array(tmp)
-    elif t=='object' and 'properties' in schem:
-        return Record(converted, name, schem)
-    elif t == 'object' and 'additionalProperties' in schem and set(schem['additionalProperties']['type']) == {'string', 'null'}:
-        return StringMap(NullableString(schem))
-    elif t == 'object' and 'additionalProperties' in schem and {schem['additionalProperties']['type']} == {'string'}:
-        return StringMap(String(schem))
-    elif t=='object' and set(schem.keys()) == {'description','type'}:
-        return JsonObject(schem)
+    if 'enum' in schem or '_enum' in schem:
+        return Enum(name, schem)
     elif isinstance(t,list) and set(t) == {'integer','string'}:
         return IntOrString(schem)
     elif isinstance(t, list) and set(t) == {'null', 'string'}:
         return NullableString(schem)
     elif isinstance(t, list) and set(t) == {'array', 'boolean', 'integer', 'null', 'number', 'object', 'string'}:
         return JsonObject(schem)
-    elif 'enum' in schem or '_enum' in schem:
-        return Enum(name, schem)
     else:
-        assert False
+        if t=='integer':
+            return Integer(schem)
+        elif t == 'number':
+            return Real(schem)
+        elif t=='string':
+            return String(schem)
+        elif t=='boolean':
+            return Boolean(schem)
+        elif t=='array':
+            tmp = make(converted, name, schem['items'])
+            return Array(tmp)
+        elif t=='object' and 'properties' in schem:
+            return Record(converted, name, schem)
+        elif t == 'object' and 'additionalProperties' in schem and set(schem['additionalProperties']['type']) == {'string', 'null'}:
+            return StringMap(NullableString(schem))
+        elif t == 'object' and 'additionalProperties' in schem and {schem['additionalProperties']['type']} == {'string'}:
+            return StringMap(String(schem))
+        elif t=='object' and set(schem.keys()) == {'description','type'}:
+            return JsonObject(schem)
+        else:
+            assert False
 
 class TypeBase(object):
     def __init__(self, schem):
-        self.descr = schem.get('description', '')
+        if schem!=False:
+            self.descr = schem.get('description', '')
 
     def deps(self):
         return set()
@@ -117,19 +119,36 @@ class TypeBase(object):
 
 
 class Enum(TypeBase):
-    def __init__(self, name, schem):
+    def __init__(self, *args):
+        super().__init__(False)
+        if len(args)==2:
+            self.from_json(*args)
+        elif len(args)==3:
+            self.from_values(*args)
+        else:
+            assert False, 'Enum with wrong number of arguments'
+
+    def from_values(self, name, descr, values):
+        self.name = name
+        self.descr = descr
+        self.values = values
+
+    def from_json(self, name, schem):
         self.name = name
         self.descr = schem.get('description', '')
         self.values = schem.get('enum', schem.get('_enum'))
 
     def s(self, n):
-        'datatype {} = '
+        return 'string'
 
     def to_json(self, n, f):
-        if f:
-            return '"{}"'.format(f)
+        if len(self.values)==1:
+            return '(String.toJson "{}")'.format(next(iter(self.values)))
         else:
-            assert False
+            if f:
+                return '(String.toJson {})'.format(f)
+            else:
+                return 'String.toJson'
 
     def __str__(self):
         return self.s()
@@ -137,9 +156,20 @@ class Enum(TypeBase):
     def __eq__(self, other):
         return isinstance(other,Enum) and self.values==other.values
 
+    def union(self, other):
+        if isinstance(other, Enum):
+            valid_values = set(self.values).intersection(other.values)
+            if len(valid_values)!=0:
+                return Enum(self.name, self.descr, valid_values)
+            else:
+                assert False, 'empty valid values set for Enum'
+        elif isinstance(other, String):
+            return self
+
 
 class RefObj(TypeBase):
     def __init__(self, name, schem):
+        super().__init__(schem)
         self.name = name
         self.descr = schem.get('description', '')
         self.ref = schem['$ref']
@@ -181,6 +211,7 @@ class RefObj(TypeBase):
 
 class Record(TypeBase):
     def __init__(self, *args):
+        super().__init__(False)
         if isinstance(args[0], str):
             self.from_internal(*args)
         else:
@@ -271,7 +302,7 @@ class Record(TypeBase):
 
 class Integer(TypeBase):
     def __init__(self, schem):
-        super(Integer, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'int'
@@ -291,7 +322,7 @@ class Integer(TypeBase):
 
 class Real(TypeBase):
     def __init__(self, schem):
-        super(Real, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'real'
@@ -311,7 +342,7 @@ class Real(TypeBase):
 
 class Boolean(TypeBase):
     def __init__(self, schem):
-        super(Boolean, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'bool'
@@ -331,7 +362,7 @@ class Boolean(TypeBase):
 
 class String(TypeBase):
     def __init__(self, schem):
-        super(String, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'string'
@@ -348,10 +379,16 @@ class String(TypeBase):
     def __eq__(self, other):
         return isinstance(other, String)
 
+    def union(self, other):
+        if isinstance(other, Enum):
+            return other
+        else:
+            return super().union(other)
+
 
 class IntOrString(TypeBase):
     def __init__(self, schem):
-        super(IntOrString, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'IntOrString.t'
@@ -371,7 +408,7 @@ class IntOrString(TypeBase):
 
 class NullableString(TypeBase):
     def __init__(self, schem):
-        super(NullableString, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'NullableString.t'
@@ -391,16 +428,17 @@ class NullableString(TypeBase):
 
 class StringMap(TypeBase):
     def __init__(self, e):
+        super().__init__(False)
         self.e = e
 
     def s(self, n):
-        return '({} StringMap.t)'.format(self.e.s(n))
+        return '({} StringMap.map)'.format(self.e.s(n))
 
     def to_json(self, n, f):
         if f:
-            return '(StringMap.toJson ({},{}))'.format(self.e.to_json(n, f), f)
+            return '(Json.OBJECT (List.map (fn (k,v) => (k,{} v)) (StringMap.list {})))'.format(self.e.to_json(n,False), f)
         else:
-            return 'StringMap.toJson'
+            return '(fn x => Json.OBJECT (List.map ({}) (StringMap.list x)))'.format(self.e.to_json(n,f))
 
     def __str__(self):
         return self.s()
@@ -414,7 +452,7 @@ class StringMap(TypeBase):
 
 class JsonObject(TypeBase):
     def __init__(self, schem):
-        super(JsonObject, self).__init__(schem)
+        super().__init__(schem)
 
     def s(self, n):
         return 'Json.value'
@@ -437,6 +475,7 @@ class JsonObject(TypeBase):
 
 class Array(TypeBase):
     def __init__(self, e):
+        super().__init__(False)
         self.e = e
 
     def s(self, n):
@@ -461,6 +500,7 @@ class Array(TypeBase):
 
 class Option(TypeBase):
     def __init__(self, o):
+        super().__init__(False)
         self.o = o
 
     def s(self, n):
@@ -528,13 +568,11 @@ def print_obj(obj):
 
 def print_enum(obj):
     global indent
-    i_print('structure {} = struct'.format(obj['name']))
+    i_print('structure {} = struct'.format(obj.name))
     indent += 2
-    i_print('(* {} *)'.format(obj['description']))
+    i_print('(* {} *)'.format(obj.descr))
 
-    props = set(obj['properties'].keys()) if 'properties' in obj else set()
-
-    tmp = 'datatype t = ' + ' | '.join(obj['enum'].values)
+    tmp = 'datatype t = ' + ' | '.join(obj.values)
 
     i_print(tmp)
 
@@ -544,12 +582,12 @@ def print_enum(obj):
     i_print('fun toJson x = case x of')
     indent += 2
     first = True
-    for e in obj['enum'].values:
+    for e in obj.values:
         if first:
             first = False
-            i_print('  {} => "{}"'.format(e, e))
+            i_print('  {} => String.toJson "{}"'.format(e, e))
         else:
-            i_print('| {} => "{}"'.format(e, e))
+            i_print('| {} => String.toJson "{}"'.format(e, e))
     indent -= 2
 
     indent -= 2
@@ -652,5 +690,7 @@ for name in dep_ord_names:
         print_enum(schem)
     elif hasattr(schem, 'props'):
         print_obj(schem)
+    elif isinstance(schem, JsonObject):
+        i_print('structure {} = struct type t = Json.value fun toJson x = x end'.format(name))
     else:
-        continue
+        assert False

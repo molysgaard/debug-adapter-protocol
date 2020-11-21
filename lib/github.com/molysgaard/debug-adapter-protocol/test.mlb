@@ -1,7 +1,8 @@
 $(SML_LIB)/basis/basis.mlb
 
 local
-  (* ../../diku-dk/sml-json/json.mlb *)
+  ../../diku-dk/sml-setmap/string_map.mlb
+
   $(SML_LIB)/smlnj-lib/JSON/json-lib.mlb
 in
   out.sml
