@@ -122,10 +122,10 @@ class Enum(TypeBase):
         self.descr = schem.get('description', '')
         self.values = schem.get('enum', schem.get('_enum'))
 
-    def s(self):
+    def s(self, n):
         'datatype {} = '
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '"{}"'.format(f)
         else:
@@ -144,14 +144,23 @@ class RefObj(TypeBase):
         self.descr = schem.get('description', '')
         self.ref = schem['$ref']
 
-    def s(self):
-        return self.parse_name()
-
-    def to_json(self, f):
-        if f:
-            return '"{}"'.format(f)
+    def s(self, n):
+        if n==self.parse_name():
+            return 't'
         else:
-            return '{}.toJson'.format(self.parse_name())
+            return self.parse_name()+'.t'
+
+    def to_json(self, n, f):
+        if n==self.parse_name():
+            if f:
+                return '(toJson {})'.format(f)
+            else:
+                return 'toJson'
+        else:
+            if f:
+                return '({}.toJson {})'.format(self.parse_name(), f)
+            else:
+                return '{}.toJson'.format(self.parse_name())
 
     def parse_name(self):
         prefix = '#/definitions/'
@@ -163,6 +172,9 @@ class RefObj(TypeBase):
 
     def __eq__(self, other):
         return isinstance(other,Enum) and self.values==other.values
+
+    def deps(self):
+        return {self.parse_name()}
 
     def union(self, other):
         assert False, 'Union called for RefObj which should never happen'
@@ -178,15 +190,16 @@ class Record(TypeBase):
         self.name=name
         self.descr=descr
         self.props=props
-        self.deps = set()
+        deps = set()
+        for p in self.props.values():
+            deps = deps.union(p.deps())
+        self.ddeps = deps
 
     def from_json(self, converted, name, obj):
         self.name = name
         self.descr = obj.get('description','')
         self.props = {}
-        self.deps = set()
-
-        deps = set()
+        self.ddeps = set()
 
         # first we rename any properties that should be renamed because of name classeh with SML syntax
         if 'properties' in obj:
@@ -201,35 +214,35 @@ class Record(TypeBase):
         req_props = set(obj['required']) if 'required' in obj else props
         opt_props = props.difference(req_props)
 
+        deps = set()
         if props:
             for prop_name, prop_descr in obj['properties'].items():
                 #basic_descr = get_prop_type(opt_props, prop_name, prop_descr)
                 basic_descr = make(converted, prop_name, prop_descr)
                 self.props[prop_name] = basic_descr
+                deps = deps.union(basic_descr.deps())
 
-    def s(self):
+        self.ddeps = deps
+
+    def s(self, n):
         tmp = []
         for k,v in self.props.items():
             assert hasattr(v,'s')
-            tmp.append('  {}: {}'.format(k,v.s()))
+            tmp.append('  {}: {}'.format(k,v.s(n)))
         fields = ',\n'.join(tmp)
         return '{{\n{}\n}}'.format(fields)
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             fields = []
             for k,v in self.props.items():
-                fields.append('("{}", {})'.format(k, v.to_json('(#{} {})'.format(k, f))))
+                fields.append('("{}", {})'.format(k, v.to_json(n, '(#{} {})'.format(k, f))))
             return '(Json.OBJECT [{}])'.format(', '.join(fields))
         else:
             return 'id'
 
     def deps(self):
-        d = set()
-        for v in self.props.values():
-            d = d.union(v.deps())
-
-        return d
+        return self.ddeps
 
     def __str__(self):
         return self.s()
@@ -260,10 +273,10 @@ class Integer(TypeBase):
     def __init__(self, schem):
         super(Integer, self).__init__(schem)
 
-    def s(self):
+    def s(self, n):
         return 'int'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(Int.toJson {})'.format(f)
         else:
@@ -280,10 +293,10 @@ class Real(TypeBase):
     def __init__(self, schem):
         super(Real, self).__init__(schem)
 
-    def s(self):
+    def s(self, n):
         return 'real'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(Real.toJson {})'.format(f)
         else:
@@ -300,10 +313,10 @@ class Boolean(TypeBase):
     def __init__(self, schem):
         super(Boolean, self).__init__(schem)
 
-    def s(self):
+    def s(self, n):
         return 'bool'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(Bool.toJson {})'.format(f)
         else:
@@ -320,10 +333,10 @@ class String(TypeBase):
     def __init__(self, schem):
         super(String, self).__init__(schem)
 
-    def s(self):
+    def s(self, n):
         return 'string'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(String.toJson {})'.format(f)
         else:
@@ -340,10 +353,10 @@ class IntOrString(TypeBase):
     def __init__(self, schem):
         super(IntOrString, self).__init__(schem)
 
-    def s(self):
-        return 'IntOrString'
+    def s(self, n):
+        return 'IntOrString.t'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(IntOrString.toJson {})'.format(f)
         else:
@@ -360,10 +373,10 @@ class NullableString(TypeBase):
     def __init__(self, schem):
         super(NullableString, self).__init__(schem)
 
-    def s(self):
-        return 'NullableString'
+    def s(self, n):
+        return 'NullableString.t'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return '(NullableString.toJson {})'.format(f)
         else:
@@ -380,12 +393,12 @@ class StringMap(TypeBase):
     def __init__(self, e):
         self.e = e
 
-    def s(self):
-        return '({} StringMap)'.format(self.e.s())
+    def s(self, n):
+        return '({} StringMap.t)'.format(self.e.s(n))
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
-            return '(StringMap.toJson ({},{}))'.format(self.e.to_json(f), f)
+            return '(StringMap.toJson ({},{}))'.format(self.e.to_json(n, f), f)
         else:
             return 'StringMap.toJson'
 
@@ -395,15 +408,18 @@ class StringMap(TypeBase):
     def __eq__(self, other):
         return isinstance(other, StringMap)
 
+    def deps(self):
+        return self.e.deps()
+
 
 class JsonObject(TypeBase):
     def __init__(self, schem):
         super(JsonObject, self).__init__(schem)
 
-    def s(self):
-        return 'Json.t'
+    def s(self, n):
+        return 'Json.value'
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
             return f
         else:
@@ -415,7 +431,6 @@ class JsonObject(TypeBase):
     def __eq__(self, other):
         return isinstance(other, JsonObject)
 
-
     def union(self, other):
         return other
 
@@ -424,14 +439,15 @@ class Array(TypeBase):
     def __init__(self, e):
         self.e = e
 
-    def s(self):
-        return '({} array)'.format(self.e.s())
+    def s(self, n):
+        return '({} list)'.format(self.e.s(n))
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
-            return 'Array.map ({}, {})'.format(self.e.to_json(False), f)
+            return '(Json.ARRAY (List.map {} {}))'.format(self.e.to_json(n, False), f)
         else:
-            return 'TODO Array.map ({}, {})'.format(self.e.to_json(False), f)
+            assert False, 'List.to_json without field'
+            return '(TODO List.map {} {})'.format(self.e.to_json(n, False), f)
 
     def deps(self):
         return self.e.deps()
@@ -447,12 +463,12 @@ class Option(TypeBase):
     def __init__(self, o):
         self.o = o
 
-    def s(self):
-        return '({} option)'.format(self.o.s())
+    def s(self, n):
+        return '({} option)'.format(self.o.s(n))
 
-    def to_json(self, f):
+    def to_json(self, n, f):
         if f:
-            return '(Option.toJson ({},{}))'.format(self.o.to_json(False), f)
+            return '(Option.toJson ({},{}))'.format(self.o.to_json(n, False), f)
         else:
             assert False
 
@@ -464,98 +480,6 @@ class Option(TypeBase):
 
     def __eq__(self, other):
         return isinstance(other,Option) and self.o==other.o
-
-
-class Unimplemented(object):
-    def __init__(self, o):
-        self.o = o
-
-    def s(self):
-        return str(self.o)
-
-    def to_json(self, f):
-        return 'Unimplemented.toJson ({})'.format(self.s())
-
-    def __str__(self):
-        return self.s()
-
-    def __eq__(self, other):
-        return False
-
-
-def lookup(name, converted, o):
-    if '$ref' in o:
-        n = deref(o['$ref'])
-        if n.s() in converted.keys():
-            return converted[n.s()]
-        else:
-            print('ERROR: {} not found in converted'.format(n.s()))
-            assert False
-    else:
-        return convert_obj(name, o)
-
-
-def type_union(ta, tb):
-    if ta==tb:
-        return ta
-
-    elif isinstance(ta,Unimplemented) and (not isinstance(tb,Unimplemented)):
-        return tb
-    elif (not isinstance(ta,Unimplemented)) and isinstance(tb,Unimplemented):
-        return ta
-
-    elif isinstance(ta, Option) and isinstance(tb, Option):
-        return Option(type_union(ta.o, tb.o))
-
-    elif isinstance(ta, Option) and isinstance(ta.o, JsonObject) and not isinstance(tb, (Unimplemented,JsonObject)):
-        return tb
-    elif isinstance(tb, Option) and isinstance(tb.o, JsonObject) and not isinstance(ta, (Unimplemented,JsonObject)):
-        return ta
-
-
-    elif isinstance(ta, JsonObject) and (not isinstance(tb, JsonObject)):
-        return tb
-    elif (not isinstance(ta, JsonObject)) and isinstance(tb, JsonObject):
-        return ta
-
-    else:
-        print(ta)
-        print(tb)
-        assert False
-
-
-def intersect(a, b):
-    pa = a['properties']
-    pb = b['properties']
-
-    ka = set(pa.keys())
-    kb = set(pb.keys())
-
-    out = dict()
-
-    for k in ka.intersection(kb):
-        out[k] = type_union(pa[k], pb[k])
-
-    for k in ka.difference(kb):
-        out[k] = pa[k]
-
-    for k in kb.difference(ka):
-        out[k] = pb[k]
-
-    return out
-
-
-def obj_list_intersection(name, converted, objs):
-    olist = [lookup(name, converted, o) for o in objs]
-
-    out = {'properties':{}, 'deps':set()}
-    for o in olist:
-        out['properties'] = intersect(out, o)
-
-    for n,t in out['properties'].items():
-        out['deps'] = out['deps'].union(t.deps())
-
-    return out
 
 
 def i_print(s):
@@ -570,96 +494,16 @@ def i_print(s):
 
     print(s)
 
-def is_basic(name, descr):
-    if 'type' not in descr:
-        if '$ref' in descr:
-            return deref(descr['$ref'])
-        else:
-            return False
-    t = descr['type']
-    if t=='integer':
-        return Integer()
-    elif t == 'number':
-        return Real()
-    elif t=='string':
-        return String()
-    elif t=='boolean':
-        return Boolean()
-    elif t=='array':
-        e = is_basic(name, descr['items'])
-        if e:
-            return Array(e)
-        else:
-            return False
-    elif t=='object' and 'properties' in descr:
-        return Record(convert_obj(name, descr))
-    elif t == 'object' and 'additionalProperties' in descr and set(descr['additionalProperties']['type']) == {'string', 'null'}:
-        return StringMap(NullableString())
-    elif t == 'object' and 'additionalProperties' in descr and set([descr['additionalProperties']['type']]) == {'string'}:
-        return StringMap(String())
-    elif isinstance(t,list) and set(t)=={'integer','string'}:
-        return IntOrString()
-    elif isinstance(t, list) and set(t) == {'null', 'string'}:
-        return NullableString()
-    elif isinstance(t, list) and set(t) == {'array', 'boolean', 'integer', 'null', 'number', 'object', 'string'}:
-        return JsonObject()
-    else:
-        return False
-
-def get_prop_type(opt_props, name, descr):
-    basic_descr = is_basic(name, descr)
-    if basic_descr:
-        if name in opt_props:
-            return Option(basic_descr)
-        else:
-            return basic_descr
-    else:
-        return Unimplemented(descr)
-
-def convert_obj(name, obj):
-    desc = obj.get('description','')
-    o = {'name':name, 'description':desc, 'properties':{}}
-
-    deps = set()
-
-    if 'properties' in obj:
-        ks = list(obj['properties'].keys())
-        for k in ks:
-            if k in prop_name_to_field:
-                obj['properties'][prop_name_to_field[k]] = obj['properties'][k]
-                del obj['properties'][k]
-
-    props = set(obj['properties'].keys()) if 'properties' in obj else set()
-    req_props = set(obj['required']) if 'required' in obj else props
-    opt_props = props.difference(req_props)
-
-    if props:
-        for prop_name, prop_descr in obj['properties'].items():
-            basic_descr = get_prop_type(opt_props, prop_name, prop_descr)
-            o['properties'][prop_name] = basic_descr
-            deps = deps.union(set(basic_descr.deps()))
-
-    o['deps'] = deps
-
-    return o
-
-
-def convert_enum(name, obj):
-    desc = obj.get('description','')
-    o = {'name':name, 'description':desc, 'enum':Enum(obj['enum'])}
-    return o
-
-
 def print_obj(obj):
     global indent
     i_print('structure {} = struct'.format(obj.name))
     indent += 2
     i_print('(* {} *)'.format(obj.descr))
 
-    i_print('type t = {')
+    i_print('datatype t = T of {')
     fields = []
     for prop_name,prop_type in obj.props.items():
-        fields.append('{}: {}'.format(prop_name, prop_type.s()))
+        fields.append('{}: {}'.format(prop_name, prop_type.s(obj.name)))
     indent += 2
     i_print(',\n'.join(fields))
     indent -= 2
@@ -668,10 +512,10 @@ def print_obj(obj):
     print()
     print()
 
-    i_print('fun toJson (x : t) = Json.OBJECT [')
+    i_print('fun toJson ((T x) : t) = Json.OBJECT [')
     fields = []
     for prop_name,prop_type in obj.props.items():
-        fields.append('("{}", {})'.format(field_name_to_prop.get(prop_name,prop_name), prop_type.to_json('(#{} x)'.format(prop_name))))
+        fields.append('("{}", {})'.format(field_name_to_prop.get(prop_name,prop_name), prop_type.to_json(obj.name, '(#{} x)'.format(prop_name))))
     indent += 2
     i_print(',\n'.join(fields))
     indent -= 2
@@ -783,15 +627,25 @@ structure IntOrString = struct
 end
 '''
 
-dep_graph = {}
-
 converted = create_converted(list(dap_json['definitions'].keys()))
+dep_graph = {}
+for name, obj in converted.items():
+    dep_graph[name] = obj.deps()
 
-#print(list(order))
+#for n,deps in dep_graph.items():
+#    print(n, deps)
+#exit(0)
+
+dep_ord_names = []
+for name_group in toposort.toposort(dep_graph):
+    dep_ord_names += list(name_group)
+
+#print(dep_ord_names)
 #exit(0)
 
 i_print(header)
-for name, schem in converted.items():
+for name in dep_ord_names:
+    schem = converted[name]
     if name in ignored_schems:
         continue
     if isinstance(schem, Enum):
