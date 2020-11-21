@@ -1,0 +1,8 @@
+$(SML_LIB)/basis/basis.mlb
+
+local
+  (* ../../diku-dk/sml-json/json.mlb *)
+  $(SML_LIB)/smlnj-lib/JSON/json-lib.mlb
+in
+  out.sml
+end
