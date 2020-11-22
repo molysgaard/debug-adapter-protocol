@@ -1,0 +1,7 @@
+$(SML_LIB)/basis/basis.mlb
+
+local
+  $(SML_LIB)/smlnj-lib/JSON/json-lib.mlb
+in
+  sml-debug-adapter.sml
+end

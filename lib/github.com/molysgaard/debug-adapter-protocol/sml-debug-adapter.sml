@@ -24,8 +24,10 @@ fun parseMessage tmpFile () = let
   val () = TextIO.flushOut tmpFile
 
 
-  val payload = TextIO.inputN (TextIO.stdIn, lengthInt)
-  val () = TextIO.output (tmpFile, ("payload: " ^ payload ^ "\n"))
+  val payloadString = TextIO.inputN (TextIO.stdIn, lengthInt)
+  val payloadJson = (JSONParser.parse (TextIO.openString payloadString))
+  val () = TextIO.output (tmpFile, ("payloadJson: "))
+  val () = JSONPrinter.print (tmpFile, payloadJson)
   val () = TextIO.flushOut tmpFile
   val eof = TextIO.endOfStream TextIO.stdIn
 in
