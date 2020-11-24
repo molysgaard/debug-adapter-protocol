@@ -678,6 +678,69 @@ dep_ord_names = []
 for name_group in toposort.toposort(dep_graph):
     dep_ord_names += list(name_group)
 
+msgs = {'requests':{}, 'events':{}}
+
+for name, schem in converted.items():
+    if hasattr(schem, 'props'):
+        t = schem.props.get('type_', None)
+        if isinstance(t, Enum) and t.values == {'request'}:
+            assert name.endswith('Request')
+            name = name[0:-len('Request')]
+            if name=='':
+                continue
+            if name in msgs['requests']:
+                msgs['requests'][name]['req'] = schem
+            else:
+                msgs['requests'][name] = {'req':schem}
+        if isinstance(t, Enum) and t.values == {'response'}:
+            assert name.endswith('Response')
+            name = name[0:-len('Response')]
+            if name=='':
+                continue
+            if name in msgs['requests']:
+                msgs['requests'][name]['resp'] = schem
+            else:
+                msgs['requests'][name] = {'resp':schem}
+
+#print(msgs)
+#exit(0)
+
+def upper_first(s):
+    return s[0].upper() + s[1:]
+
+def lower_first(s):
+    return s[0].lower() + s[1:]
+
+def print_handle_sig(requests):
+    sig_template = '''
+signature HANDLERS = sig
+{}
+end
+'''
+    handlers_sig = ['    val handle{} : Json.value -> {}.t'.format(upper_first(name), upper_first(name)+'Response') for name in requests.keys()]
+    handle_sig = '\n'.join(handlers_sig)
+    i_print(sig_template.format(handle_sig))
+
+def print_handler(requests):
+    handleRequestTemplate ='''
+functor DebugAdapterProtocol(structure Handlers : HANDLERS) :> sig val handleRequest : Json.value -> Json.Value end = struct
+    open Handlers
+    fun handleRequest req = case JSONUtil.lookupField req "command" of
+        {}
+end
+'''
+    handlers = ['"{}" => {}.toJson (handle{} ({}.fromJson req))'.format(lower_first(name), upper_first(name)+'Response', upper_first(name), upper_first(name)+'Request') for name in requests.keys()]
+    handle = '\n      | '.join(handlers)
+
+    i_print(handleRequestTemplate.format(handle))
+    
+    #handlerTemplate = '''
+    #fun handleProtocolMessage msg = case Json.lookup "type_" msg of
+    #    "request" => handleRequest msg
+    #  | "event"   => handleEvent msg
+    #  | _ => print ("Unhandled protocolMessage: " ^ Json.toString msg)
+    #'''
+
 #print(dep_ord_names)
 #exit(0)
 
@@ -694,3 +757,6 @@ for name in dep_ord_names:
         i_print('structure {} = struct type t = Json.value fun toJson x = x end'.format(name))
     else:
         assert False
+
+print_handle_sig(msgs['requests'])
+print_handler(msgs['requests'])

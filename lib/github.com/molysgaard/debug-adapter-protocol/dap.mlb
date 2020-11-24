@@ -3,7 +3,7 @@ $(SML_LIB)/basis/basis.mlb
 local
   ../../diku-dk/sml-setmap/string_map.mlb
 
-  $(SML_LIB)/smlnj-lib/JSON/json-lib.mlb
+  /home/lysgaard/proj/mlton/lib/smlnj-lib/smlnj-lib/JSON/json-lib.mlb
 in
   dap.sml
 end
