@@ -122,18 +122,18 @@ class Enum(TypeBase):
     def __init__(self, *args):
         super().__init__(False)
         if len(args)==2:
-            self.from_json(*args)
+            self.init_from_json(*args)
         elif len(args)==3:
-            self.from_values(*args)
+            self.init_from_values(*args)
         else:
             assert False, 'Enum with wrong number of arguments'
 
-    def from_values(self, name, descr, values):
+    def init_from_values(self, name, descr, values):
         self.name = name
         self.descr = descr
         self.values = values
 
-    def from_json(self, name, schem):
+    def init_from_json(self, name, schem):
         self.name = name
         self.descr = schem.get('description', '')
         self.values = schem.get('enum', schem.get('_enum'))
@@ -149,6 +149,12 @@ class Enum(TypeBase):
                 return '(String.toJson {})'.format(f)
             else:
                 return 'String.toJson'
+    
+    def from_json(self, n, f):
+        if f:
+            return '(JSONUtil.asString {})'.format(f)
+        else:
+            return 'JSONUtil.asString'
 
     def __str__(self):
         return self.s()
@@ -191,6 +197,18 @@ class RefObj(TypeBase):
                 return '({}.toJson {})'.format(self.parse_name(), f)
             else:
                 return '{}.toJson'.format(self.parse_name())
+    
+    def from_json(self, n, f):
+        if n==self.parse_name():
+            if f:
+                return '(fromJson {})'.format(f)
+            else:
+                return 'fromJson'
+        else:
+            if f:
+                return '({}.fromJson {})'.format(self.parse_name(), f)
+            else:
+                return '{}.fromJson'.format(self.parse_name())
 
     def parse_name(self):
         prefix = '#/definitions/'
@@ -213,11 +231,11 @@ class Record(TypeBase):
     def __init__(self, *args):
         super().__init__(False)
         if isinstance(args[0], str):
-            self.from_internal(*args)
+            self.init_from_internal(*args)
         else:
-            self.from_json(*args)
+            self.init_from_json(*args)
 
-    def from_internal(self, name, descr, props):
+    def init_from_internal(self, name, descr, props):
         self.name=name
         self.descr=descr
         self.props=props
@@ -226,7 +244,7 @@ class Record(TypeBase):
             deps = deps.union(p.deps())
         self.ddeps = deps
 
-    def from_json(self, converted, name, obj):
+    def init_from_json(self, converted, name, obj):
         self.name = name
         self.descr = obj.get('description','')
         self.props = {}
@@ -272,6 +290,15 @@ class Record(TypeBase):
         else:
             return 'id'
 
+    def from_json(self, n, f):
+        if f:
+            fields = []
+            for k,v in self.props.items():
+                fields.append('{}={}'.format(k, v.from_json(n, '(JSONUtil.lookupField {} "{}")'.format(f, k))))
+            return '{{ {} }}'.format(', '.join(fields))
+        else:
+            return 'id'
+
     def deps(self):
         return self.ddeps
 
@@ -312,6 +339,12 @@ class Integer(TypeBase):
             return '(Int.toJson {})'.format(f)
         else:
             return 'Int.toJson'
+    
+    def from_json(self, n, f):
+        if f:
+            return '(JSONUtil.asInt {})'.format(f)
+        else:
+            return 'JSONUtil.asInt'
 
     def __str__(self):
         return self.s()
@@ -332,6 +365,12 @@ class Real(TypeBase):
             return '(Real.toJson {})'.format(f)
         else:
             return 'Real.toJson'
+    
+    def from_json(self, n, f):
+        if f:
+            return '(JSONUtil.asNumber {})'.format(f)
+        else:
+            return 'JSONUtil.asNumber'
 
     def __str__(self):
         return self.s()
@@ -352,6 +391,12 @@ class Boolean(TypeBase):
             return '(Bool.toJson {})'.format(f)
         else:
             return 'Bool.toJson'
+    
+    def from_json(self, n, f):
+        if f:
+            return '(JSONUtil.asBool {})'.format(f)
+        else:
+            return 'JSONUtil.asBool'
 
     def __str__(self):
         return self.s()
@@ -372,6 +417,12 @@ class String(TypeBase):
             return '(String.toJson {})'.format(f)
         else:
             return 'String.toJson'
+    
+    def from_json(self, n, f):
+        if f:
+            return '(JSONUtil.asString {})'.format(f)
+        else:
+            return 'JSONUtil.asString'
 
     def __str__(self):
         return self.s()
@@ -399,6 +450,12 @@ class IntOrString(TypeBase):
         else:
             return 'IntOrString.toJson'
 
+    def from_json(self, n, f):
+        if f:
+            return '(IntOrString.fromJson {})'.format(f)
+        else:
+            return 'IntOrString.fromJson'
+
     def __str__(self):
         return self.s()
 
@@ -419,6 +476,12 @@ class NullableString(TypeBase):
         else:
             return 'NullableString.toJson'
 
+    def from_json(self, n, f):
+        if f:
+            return '(NullableString.fromJson {})'.format(f)
+        else:
+            return 'NullableString.fromJson'
+
     def __str__(self):
         return self.s()
 
@@ -436,9 +499,15 @@ class StringMap(TypeBase):
 
     def to_json(self, n, f):
         if f:
-            return '(Json.OBJECT (List.map (fn (k,v) => (k,{} v)) (StringMap.list {})))'.format(self.e.to_json(n,False), f)
+            return '(StringMap.toJson {} {})'.format(self.e.to_json(n,False), f)
         else:
-            return '(fn x => Json.OBJECT (List.map ({}) (StringMap.list x)))'.format(self.e.to_json(n,f))
+            return '(StringMap.toJson {})'.format(self.e.to_json(n,False))
+
+    def from_json(self, n, f):
+        if f:
+            return '(StringMap.fromJson {} {})'.format(self.e.from_json(n,False), f)
+        else:
+            return '(StringMap.fromJson {})'.format(self.e.from_json(n,False))
 
     def __str__(self):
         return self.s()
@@ -458,6 +527,12 @@ class JsonObject(TypeBase):
         return 'Json.value'
 
     def to_json(self, n, f):
+        if f:
+            return f
+        else:
+            return 'id'
+
+    def from_json(self, n, f):
         if f:
             return f
         else:
@@ -486,7 +561,12 @@ class Array(TypeBase):
             return '(Json.ARRAY (List.map {} {}))'.format(self.e.to_json(n, False), f)
         else:
             assert False, 'List.to_json without field'
-            return '(TODO List.map {} {})'.format(self.e.to_json(n, False), f)
+
+    def from_json(self, n, f):
+        if f:
+            return '(List.map {} (vectorToList (JSONUtil.asArray {})))'.format(self.e.from_json(n, False), f)
+        else:
+            assert False, 'List.from_json without field'
 
     def deps(self):
         return self.e.deps()
@@ -509,6 +589,12 @@ class Option(TypeBase):
     def to_json(self, n, f):
         if f:
             return '(Option.toJson ({},{}))'.format(self.o.to_json(n, False), f)
+        else:
+            assert False
+
+    def from_json(self, n, f):
+        if f:
+            return '(Option.fromJson ({},{}))'.format(self.o.to_json(n, False), f)
         else:
             assert False
 
@@ -561,6 +647,15 @@ def print_obj(obj):
     indent -= 2
     i_print(']')
 
+    i_print('fun fromJson (x : Json.value) : t = T {')
+    fields = []
+    for prop_name,prop_type in obj.props.items():
+        fn = field_name_to_prop.get(prop_name,prop_name)
+        fields.append('{}={}'.format(prop_name, prop_type.from_json(obj.name, '(JSONUtil.lookupField x "{}")'.format(fn))))
+    indent += 2
+    i_print(',\n'.join(fields))
+    indent -= 2
+    i_print('}')
 
     indent -= 2
     i_print('end\n')
@@ -588,6 +683,17 @@ def print_enum(obj):
             i_print('  {} => String.toJson "{}"'.format(e, e))
         else:
             i_print('| {} => String.toJson "{}"'.format(e, e))
+    indent -= 2
+
+    i_print('fun fromJson x = case JSONUtil.asString x of')
+    indent += 2
+    first = True
+    for e in obj.values:
+        if first:
+            first = False
+            i_print('  "{}" => {}'.format(e, e))
+        else:
+            i_print('| "{}" => {}'.format(e, e))
     indent -= 2
 
     indent -= 2
@@ -618,10 +724,16 @@ structure Json = JSON
 
 fun id x = x
 
+fun vectorToList vec = Vector.foldr (op ::) [] vec
+
 structure Option = struct
   fun toJson (f,v) = case v of
       NONE => Json.NULL
     | SOME v' => f v'
+
+  fun fromJson (f,v) = case v of
+      Json.NULL => NONE
+    | _ => f v
 end
 
 structure Int = struct
@@ -654,6 +766,10 @@ structure NullableString = struct
   fun toJson x = case x of
       SOME s => String.toJson s
     | NONE => Json.NULL
+
+  fun fromJson x = case x of
+      Json.NULL => NONE
+    | x => SOME (JSONUtil.asString x)
 end
 
 structure IntOrString = struct
@@ -662,6 +778,18 @@ structure IntOrString = struct
   fun toJson x = case x of
       IsInt i => Int.toJson i
     | IsString s => String.toJson s
+
+  fun fromJson x = (IsInt (JSONUtil.asInt x))
+        handle JSONUtil.NotInt a => (IsString (JSONUtil.asString x))
+end
+
+structure StringMap = struct
+    open StringMap
+
+    fun toJson f x = Json.OBJECT (List.map (fn (k,v) => (k,f v)) (list x))
+
+    fun fromJson f x = case x of
+        Json.OBJECT ls => StringMap.fromList (List.map (fn (k,v) => (k,f v)) ls)
 end
 '''
 
@@ -754,7 +882,7 @@ for name in dep_ord_names:
     elif hasattr(schem, 'props'):
         print_obj(schem)
     elif isinstance(schem, JsonObject):
-        i_print('structure {} = struct type t = Json.value fun toJson x = x end'.format(name))
+        i_print('structure {} = struct type t = Json.value fun toJson x = x fun fromJson x = x end'.format(name))
     else:
         assert False
 
