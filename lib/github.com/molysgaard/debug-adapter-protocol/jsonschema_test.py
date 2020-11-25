@@ -851,10 +851,15 @@ end
 
 def print_handler(requests):
     handleRequestTemplate ='''
-functor DebugAdapterProtocol(structure Handlers : HANDLERS) :> sig val handleRequest : Json.value -> Json.value end = struct
+functor DebugAdapterProtocol(structure Handlers : HANDLERS) :> sig val handleProtocolMessage : Json.value -> Json.value end = struct
     open Handlers
     fun handleRequest req = case JSONUtil.asString (JSONUtil.lookupField req "command") of
         {}
+
+    fun handleProtocolMessage msg = case JSONUtil.asString (JSONUtil.lookupField msg "type") of
+          "request" => handleRequest msg
+      (*| "event"   => handleEvent msg
+        | _ => TextIO.print ("Unhandled protocolMessage: " ^ Json.toString msg) *)
 end
 '''
     handlers = ['"{}" => {}.toJson (handle{} ({}.fromJson req))'.format(lower_first(name), upper_first(name)+'Response', upper_first(name), upper_first(name)+'Request') for name in requests.keys()]
@@ -862,12 +867,9 @@ end
 
     i_print(handleRequestTemplate.format(handle))
     
-    #handlerTemplate = '''
-    #fun handleProtocolMessage msg = case Json.lookup "type_" msg of
-    #    "request" => handleRequest msg
-    #  | "event"   => handleEvent msg
-    #  | _ => print ("Unhandled protocolMessage: " ^ Json.toString msg)
-    #'''
+    handlerTemplate = '''
+'''
+    i_print(handlerTemplate)
 
 #print(dep_ord_names)
 #exit(0)

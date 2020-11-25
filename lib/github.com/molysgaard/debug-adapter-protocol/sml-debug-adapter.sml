@@ -1,3 +1,50 @@
+structure Handlers : HANDLERS = struct
+    val handleCancel : CancelRequest.t -> CancelResponse.t
+    val handleRunInTerminal : RunInTerminalRequest.t -> RunInTerminalResponse.t
+    val handleInitialize : InitializeRequest.t -> InitializeResponse.t
+    val handleConfigurationDone : ConfigurationDoneRequest.t -> ConfigurationDoneResponse.t
+    val handleLaunch : LaunchRequest.t -> LaunchResponse.t
+    val handleAttach : AttachRequest.t -> AttachResponse.t
+    val handleRestart : RestartRequest.t -> RestartResponse.t
+    val handleDisconnect : DisconnectRequest.t -> DisconnectResponse.t
+    val handleTerminate : TerminateRequest.t -> TerminateResponse.t
+    val handleBreakpointLocations : BreakpointLocationsRequest.t -> BreakpointLocationsResponse.t
+    val handleSetBreakpoints : SetBreakpointsRequest.t -> SetBreakpointsResponse.t
+    val handleSetFunctionBreakpoints : SetFunctionBreakpointsRequest.t -> SetFunctionBreakpointsResponse.t
+    val handleSetExceptionBreakpoints : SetExceptionBreakpointsRequest.t -> SetExceptionBreakpointsResponse.t
+    val handleDataBreakpointInfo : DataBreakpointInfoRequest.t -> DataBreakpointInfoResponse.t
+    val handleSetDataBreakpoints : SetDataBreakpointsRequest.t -> SetDataBreakpointsResponse.t
+    val handleSetInstructionBreakpoints : SetInstructionBreakpointsRequest.t -> SetInstructionBreakpointsResponse.t
+    val handleContinue : ContinueRequest.t -> ContinueResponse.t
+    val handleNext : NextRequest.t -> NextResponse.t
+    val handleStepIn : StepInRequest.t -> StepInResponse.t
+    val handleStepOut : StepOutRequest.t -> StepOutResponse.t
+    val handleStepBack : StepBackRequest.t -> StepBackResponse.t
+    val handleReverseContinue : ReverseContinueRequest.t -> ReverseContinueResponse.t
+    val handleRestartFrame : RestartFrameRequest.t -> RestartFrameResponse.t
+    val handleGoto : GotoRequest.t -> GotoResponse.t
+    val handlePause : PauseRequest.t -> PauseResponse.t
+    val handleStackTrace : StackTraceRequest.t -> StackTraceResponse.t
+    val handleScopes : ScopesRequest.t -> ScopesResponse.t
+    val handleVariables : VariablesRequest.t -> VariablesResponse.t
+    val handleSetVariable : SetVariableRequest.t -> SetVariableResponse.t
+    val handleSource : SourceRequest.t -> SourceResponse.t
+    val handleThreads : ThreadsRequest.t -> ThreadsResponse.t
+    val handleTerminateThreads : TerminateThreadsRequest.t -> TerminateThreadsResponse.t
+    val handleModules : ModulesRequest.t -> ModulesResponse.t
+    val handleLoadedSources : LoadedSourcesRequest.t -> LoadedSourcesResponse.t
+    val handleEvaluate : EvaluateRequest.t -> EvaluateResponse.t
+    val handleSetExpression : SetExpressionRequest.t -> SetExpressionResponse.t
+    val handleStepInTargets : StepInTargetsRequest.t -> StepInTargetsResponse.t
+    val handleGotoTargets : GotoTargetsRequest.t -> GotoTargetsResponse.t
+    val handleCompletions : CompletionsRequest.t -> CompletionsResponse.t
+    val handleExceptionInfo : ExceptionInfoRequest.t -> ExceptionInfoResponse.t
+    val handleReadMemory : ReadMemoryRequest.t -> ReadMemoryResponse.t
+    val handleDisassemble : DisassembleRequest.t -> DisassembleResponse.t
+end
+
+struct DAP = DebugAdapterProtocol(structure Handlers = Handlers)
+
 fun parseMessage tmpFile () = let
   val contentLength = valOf (TextIO.inputLine TextIO.stdIn)
   val () = TextIO.output (tmpFile, ("inputLine: " ^ contentLength ^ "\n"))
@@ -29,6 +76,12 @@ fun parseMessage tmpFile () = let
   val () = TextIO.output (tmpFile, ("payloadJson: "))
   val () = JSONPrinter.print (tmpFile, payloadJson)
   val () = TextIO.flushOut tmpFile
+
+  val responseJson = DAP.handleRequest payloadJson
+  val () = TextIO.output (tmpFile, ("responseJson: "))
+  val () = JSONPrinter.print (tmpFile, responseJson)
+  val () = TextIO.flushOut tmpFile
+
   val eof = TextIO.endOfStream TextIO.stdIn
 in
   not eof
