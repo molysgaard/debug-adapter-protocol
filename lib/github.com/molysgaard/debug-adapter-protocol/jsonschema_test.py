@@ -845,15 +845,15 @@ signature HANDLERS = sig
 {}
 end
 '''
-    handlers_sig = ['    val handle{} : Json.value -> {}.t'.format(upper_first(name), upper_first(name)+'Response') for name in requests.keys()]
+    handlers_sig = ['    val handle{} : {}.t -> {}.t'.format(upper_first(name), upper_first(name)+'Request', upper_first(name)+'Response') for name in requests.keys()]
     handle_sig = '\n'.join(handlers_sig)
     i_print(sig_template.format(handle_sig))
 
 def print_handler(requests):
     handleRequestTemplate ='''
-functor DebugAdapterProtocol(structure Handlers : HANDLERS) :> sig val handleRequest : Json.value -> Json.Value end = struct
+functor DebugAdapterProtocol(structure Handlers : HANDLERS) :> sig val handleRequest : Json.value -> Json.value end = struct
     open Handlers
-    fun handleRequest req = case JSONUtil.lookupField req "command" of
+    fun handleRequest req = case JSONUtil.asString (JSONUtil.lookupField req "command") of
         {}
 end
 '''
